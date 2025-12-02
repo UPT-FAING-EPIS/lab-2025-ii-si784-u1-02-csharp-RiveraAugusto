@@ -1,0 +1,53 @@
+name: Snyk Analysis
+env:
+  DOTNET_VERSION: '8.x'
+on: push
+jobs:
+  security:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Bank
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 'lts/*'
+      - name: Setup Snyk
+        uses: snyk/actions/setup@master
+      - name: Snyk code test (SARIF)
+        run: snyk code test --sarif-file-output=snyk.sarif
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+      - name: Upload SARIF to GitHub Code Scanning
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: Bank/snyk.sarif
+      - name: Install snyk-to-html
+        run: npm install -g snyk-to-html
+      - name: Generate HTML report (code)
+        run: snyk code test --json | snyk-to-html -o code-test-results.html
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+      - name: Upload HTML artifact (code)
+        uses: actions/upload-artifact@v4
+        with:
+          name: snyk-code-report
+          path: Bank/code-test-results.html
+      - name: Build Docker image
+        run: docker build -t api-banco .
+      - name: Snyk container test (HTML)
+        run: snyk container test api-banco --json | snyk-to-html -o container-test-results.html
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+      - name: Upload HTML artifact (container)
+        uses: actions/upload-artifact@v4
+        with:
+          name: snyk-container-report
+          path: Bank/container-test-results.html

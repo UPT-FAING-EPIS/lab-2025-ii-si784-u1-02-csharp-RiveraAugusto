@@ -1,0 +1,36 @@
+name: Publish Docs
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.x'
+      - name: Install dll2mmd
+        run: dotnet tool install -g dll2mmd
+      - name: Install DocFX
+        run: dotnet tool install -g docfx
+      - name: Build WebApi (for class diagram)
+        working-directory: Bank
+        run: dotnet build Bank.WebApi/Bank.WebApi.csproj -c Debug
+      - name: Generate class diagram (dll2mmd)
+        working-directory: Bank
+        run: dll2mmd -f Bank.WebApi/bin/Debug/net9.0/Bank.WebApi.dll -o disenio.md
+      - name: Generate metadata
+        working-directory: Bank
+        run: docfx metadata docfx.json
+      - name: Build docs
+        working-directory: Bank
+        run: docfx build
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: Bank/_site

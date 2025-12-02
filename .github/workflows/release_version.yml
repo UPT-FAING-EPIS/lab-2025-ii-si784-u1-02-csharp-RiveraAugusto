@@ -1,0 +1,40 @@
+name: Release Version
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+env:
+  DOTNET_VERSION: '8.x'
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+      - name: Restore
+        working-directory: Bank
+        run: dotnet restore
+      - name: Test
+        working-directory: Bank
+        run: dotnet test --configuration Release --no-build
+      - name: Publish WebApi
+        working-directory: Bank
+        run: dotnet publish Bank.WebApi/Bank.WebApi.csproj -c Release -o publish
+      - name: Archive artifacts
+        run: |
+          cd Bank
+          zip -r webapi-publish.zip publish
+          zip -r solution-src.zip . -x "publish/**" -x "bin/**" -x "obj/**"
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            Bank/webapi-publish.zip
+            Bank/solution-src.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

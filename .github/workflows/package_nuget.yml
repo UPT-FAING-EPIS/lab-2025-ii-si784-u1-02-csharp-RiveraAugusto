@@ -1,0 +1,57 @@
+name: Package NuGet and SonarCloud
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+env:
+  DOTNET_VERSION: '8.x'
+jobs:
+  build-test-sonar-pack:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+      - name: Restore
+        working-directory: Bank
+        run: dotnet restore
+      - name: Test with coverage
+        working-directory: Bank
+        run: dotnet test --collect:"XPlat Code Coverage"
+      - name: Install ReportGenerator
+        run: dotnet tool install -g dotnet-reportgenerator-globaltool
+      - name: Generate coverage report
+        working-directory: Bank
+        run: ReportGenerator "-reports:./*/*/*/coverage.cobertura.xml" "-targetdir:Cobertura" -reporttypes:MarkdownSummaryGithub
+      - name: Upload coverage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: Bank/Cobertura
+      - name: Install SonarScanner for .NET
+        run: dotnet tool install --global dotnet-sonarscanner
+      - name: SonarCloud Begin
+        working-directory: Bank
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: dotnet sonarscanner begin /k:"${{ secrets.SONAR_PROJECT_KEY }}" /o:"${{ secrets.SONAR_ORG }}" /d:sonar.login="${{ secrets.SONAR_TOKEN }}"
+      - name: Build
+        working-directory: Bank
+        run: dotnet build --no-restore
+      - name: SonarCloud End
+        working-directory: Bank
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: dotnet sonarscanner end /d:sonar.login="${{ secrets.SONAR_TOKEN }}"
+      - name: Pack Bank.Domain
+        working-directory: Bank
+        run: dotnet pack Bank.Domain/Bank.Domain.csproj -c Release -o out
+      - name: Publish NuGet to GitHub Packages
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        working-directory: Bank
+        run: |
+          dotnet nuget push out/*.nupkg --source "https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json" --api-key $GITHUB_TOKEN
